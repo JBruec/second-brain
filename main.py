@@ -7,6 +7,7 @@ import os
 from dotenv import load_dotenv
 from typing import List, Optional
 import asyncio
+from datetime import datetime
 
 from app.core.config import settings
 from app.api.routes import auth, projects, documents, memory, calendar, reminders, search
@@ -34,17 +35,25 @@ app.add_middleware(
 @app.on_event("startup")
 async def startup_event():
     """Initialize database connections and services"""
+    print("🚀 Starting AI Second Brain application...")
+    
+    # Try to initialize MongoDB
     try:
-        # Initialize MongoDB
         await MongoDB.connect()
-        
-        # Initialize Memory Store
-        await MemoryStore.initialize()
-        
-        print("✅ Application startup complete")
+        print("✅ MongoDB connected successfully")
     except Exception as e:
-        print(f"❌ Startup failed: {e}")
-        raise
+        print(f"⚠️ MongoDB connection failed: {e}")
+        print("ℹ️ Application will continue without MongoDB (some features may not work)")
+    
+    # Try to initialize Memory Store
+    try:
+        await MemoryStore.initialize()
+        print("✅ Memory Store initialized successfully")
+    except Exception as e:
+        print(f"⚠️ Memory Store initialization failed: {e}")
+        print("ℹ️ Application will continue without Memory Store (some features may not work)")
+    
+    print("✅ Application startup complete")
 
 @app.on_event("shutdown")
 async def shutdown_event():
@@ -71,7 +80,33 @@ async def root():
 
 @app.get("/health")
 async def health_check():
-    return {"status": "healthy"}
+    """Health check endpoint for Railway and monitoring"""
+    try:
+        # Basic health check
+        health_status = {
+            "status": "healthy",
+            "timestamp": datetime.utcnow().isoformat()
+            "version": "1.0.0"
+        }
+        
+        # Check MongoDB if available
+        if MongoDB.client:
+            try:
+                await MongoDB.client.admin.command('ping')
+                health_status["mongodb"] = "connected"
+            except:
+                health_status["mongodb"] = "disconnected"
+        else:
+            health_status["mongodb"] = "not_configured"
+            
+        return health_status
+    except Exception as e:
+        # Even if health check has issues, return a basic response
+        return {
+            "status": "degraded", 
+            "error": str(e),
+            "timestamp": datetime.utcnow().isoformat()
+        }
 
 if __name__ == "__main__":
     uvicorn.run(
